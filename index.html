@@ -57,4 +57,266 @@
   .entry-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .badge { font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 6px; display: inline-block; white-space: nowrap; }
   .badge-observation { background: #e6f1fb; color: #0c447c; }
-  .badge-issue       { backg
+  .badge-issue       { background: #fcebeb; color: #791f1f; }
+  .badge-question    { background: #faeeda; color: #633806; }
+  .badge-decision    { background: #eaf3de; color: #27500a; }
+  .badge-design      { background: #eeedfe; color: #3c3489; }
+  .badge-comp        { background: #f1efe8; color: #5f5e5a; border: 0.5px solid #e0ddd6; }
+  .badge-tag         { background: #f5f5f3; color: #888; border: 0.5px solid #e0e0de; }
+  .badge-high        { background: #fcebeb; color: #791f1f; }
+  .badge-low         { background: #f5f5f3; color: #888; }
+  .entry-ts { font-size: 11px; color: #aaa; margin-left: auto; white-space: nowrap; }
+  .entry-comment { font-size: 14px; color: #1a1a1a; line-height: 1.6; margin-bottom: 8px; }
+  .entry-actions { display: flex; gap: 6px; }
+  .entry-actions button { font-size: 12px; padding: 4px 10px; }
+
+  .empty { text-align: center; padding: 3rem 1rem; color: #aaa; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>OWH orphan search — testing log</h1>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Total</div><div class="stat-val" id="s-total">0</div></div>
+    <div class="stat"><div class="stat-label">Issues</div><div class="stat-val" id="s-issues">0</div></div>
+    <div class="stat"><div class="stat-label">Questions</div><div class="stat-val" id="s-questions">0</div></div>
+    <div class="stat"><div class="stat-label">Design notes</div><div class="stat-val" id="s-design">0</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title" id="form-title">New entry</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="f-type">Type</label>
+        <select id="f-type">
+          <option value="observation">Observation</option>
+          <option value="issue">Issue</option>
+          <option value="question">Question</option>
+          <option value="decision">Decision needed</option>
+          <option value="design">Design note</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="f-component">Component</label>
+        <select id="f-component">
+          <option value="Search UI">Search UI</option>
+          <option value="Search logic/outcome">Search logic / outcome</option>
+          <option value="Tool/agent">Tool / agent</option>
+          <option value="Report">Report</option>
+          <option value="Manage">Manage</option>
+          <option value="Maintain">Maintain</option>
+          <option value="Connect">Connect</option>
+          <option value="Data">Data</option>
+          <option value="Law">Law</option>
+          <option value="Client">Client</option>
+          <option value="Infrastructure">Infrastructure</option>
+          <option value="General">General</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="f-priority">Priority</label>
+        <select id="f-priority">
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label for="f-tag">Tag (optional)</label>
+      <input type="text" id="f-tag" placeholder="e.g. metadata, rights lookup, API…">
+    </div>
+    <div class="form-group">
+      <label for="f-comment">Note</label>
+      <textarea id="f-comment" placeholder="Describe your observation, issue, or question…"></textarea>
+    </div>
+    <div class="form-actions">
+      <button class="primary" onclick="saveEntry()">+ Add entry</button>
+      <button onclick="clearForm()">Clear</button>
+      <span class="save-msg" id="save-msg">✓ Saved</span>
+    </div>
+  </div>
+
+  <div class="section-title">Log</div>
+  <div class="filters">
+    <select id="filter-type" onchange="render()">
+      <option value="">All types</option>
+      <option value="observation">Observation</option>
+      <option value="issue">Issue</option>
+      <option value="question">Question</option>
+      <option value="decision">Decision needed</option>
+      <option value="design">Design note</option>
+    </select>
+    <select id="filter-comp" onchange="render()">
+      <option value="">All components</option>
+      <option value="Search UI">Search UI</option>
+      <option value="Search logic/outcome">Search logic / outcome</option>
+      <option value="Tool/agent">Tool / agent</option>
+      <option value="Report">Report</option>
+      <option value="Manage">Manage</option>
+      <option value="Maintain">Maintain</option>
+      <option value="Connect">Connect</option>
+      <option value="Data">Data</option>
+      <option value="Law">Law</option>
+      <option value="Client">Client</option>
+      <option value="Infrastructure">Infrastructure</option>
+      <option value="General">General</option>
+    </select>
+    <input type="text" id="filter-search" placeholder="Search notes…" oninput="render()">
+    <button onclick="exportCSV()">↓ Export CSV</button>
+  </div>
+  <div class="log-list" id="log-list"></div>
+</div>
+
+<script>
+const STORE_KEY = 'owh-testing-log-v1';
+let entries = [];
+let editingId = null;
+
+const typeLabel = {
+  observation: 'Observation', issue: 'Issue',
+  question: 'Question', decision: 'Decision needed', design: 'Design note'
+};
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) entries = JSON.parse(raw);
+  } catch(e) { entries = []; }
+  render();
+}
+
+function persist() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(entries));
+}
+
+function saveEntry() {
+  const comment = document.getElementById('f-comment').value.trim();
+  if (!comment) { document.getElementById('f-comment').focus(); return; }
+  const entry = {
+    id: editingId || Date.now().toString(),
+    type: document.getElementById('f-type').value,
+    component: document.getElementById('f-component').value,
+    priority: document.getElementById('f-priority').value,
+    tag: document.getElementById('f-tag').value.trim(),
+    comment,
+    ts: editingId ? (entries.find(e=>e.id===editingId)||{}).ts || Date.now() : Date.now(),
+    edited: editingId ? Date.now() : null
+  };
+  if (editingId) {
+    const i = entries.findIndex(e=>e.id===editingId);
+    if (i>-1) entries[i] = entry;
+    editingId = null;
+  } else {
+    entries.unshift(entry);
+  }
+  persist();
+  clearForm();
+  render();
+  const msg = document.getElementById('save-msg');
+  msg.classList.add('show');
+  setTimeout(()=>msg.classList.remove('show'), 2000);
+}
+
+function clearForm() {
+  document.getElementById('f-type').selectedIndex = 0;
+  document.getElementById('f-component').selectedIndex = 0;
+  document.getElementById('f-priority').selectedIndex = 0;
+  document.getElementById('f-tag').value = '';
+  document.getElementById('f-comment').value = '';
+  editingId = null;
+  document.getElementById('form-title').textContent = 'New entry';
+}
+
+function deleteEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  entries = entries.filter(e=>e.id!==id);
+  persist(); render();
+}
+
+function editEntry(id) {
+  const e = entries.find(x=>x.id===id);
+  if (!e) return;
+  editingId = id;
+  document.getElementById('f-type').value = e.type;
+  document.getElementById('f-component').value = e.component;
+  document.getElementById('f-priority').value = e.priority || 'normal';
+  document.getElementById('f-tag').value = e.tag || '';
+  document.getElementById('f-comment').value = e.comment;
+  document.getElementById('form-title').textContent = 'Editing entry';
+  document.getElementById('f-comment').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function fmtDate(ts) {
+  const d = new Date(ts);
+  return d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'})
+    + ' ' + d.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'});
+}
+
+function render() {
+  const ft = document.getElementById('filter-type').value;
+  const fc = document.getElementById('filter-comp').value;
+  const fs = document.getElementById('filter-search').value.toLowerCase();
+
+  const visible = entries.filter(e=>{
+    if (ft && e.type !== ft) return false;
+    if (fc && e.component !== fc) return false;
+    if (fs && !e.comment.toLowerCase().includes(fs) && !(e.tag||'').toLowerCase().includes(fs)) return false;
+    return true;
+  });
+
+  document.getElementById('s-total').textContent = entries.length;
+  document.getElementById('s-issues').textContent = entries.filter(e=>e.type==='issue').length;
+  document.getElementById('s-questions').textContent = entries.filter(e=>e.type==='question').length;
+  document.getElementById('s-design').textContent = entries.filter(e=>e.type==='design').length;
+
+  const list = document.getElementById('log-list');
+  if (!visible.length) {
+    list.innerHTML = `<div class="empty">${entries.length ? 'No entries match the current filter.' : 'No entries yet — add your first note above.'}</div>`;
+    return;
+  }
+
+  list.innerHTML = visible.map(e=>`
+    <div class="entry">
+      <div class="entry-header">
+        <div class="entry-meta">
+          <span class="badge badge-${e.type}">${typeLabel[e.type]||e.type}</span>
+          <span class="badge badge-comp">${e.component}</span>
+          ${e.priority==='high' ? '<span class="badge badge-high">↑ High</span>' : ''}
+          ${e.priority==='low'  ? '<span class="badge badge-low">↓ Low</span>'   : ''}
+          ${e.tag ? `<span class="badge badge-tag">${e.tag}</span>` : ''}
+        </div>
+        <span class="entry-ts">${fmtDate(e.ts)}${e.edited ? ' · edited '+fmtDate(e.edited) : ''}</span>
+      </div>
+      <div class="entry-comment">${e.comment.replace(/\n/g,'<br>')}</div>
+      <div class="entry-actions">
+        <button onclick="editEntry('${e.id}')">Edit</button>
+        <button class="danger" onclick="deleteEntry('${e.id}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function exportCSV() {
+  if (!entries.length) return;
+  const cols = ['Date','Type','Component','Priority','Tag','Note'];
+  const rows = entries.map(e=>[
+    fmtDate(e.ts),
+    typeLabel[e.type]||e.type,
+    e.component,
+    e.priority||'normal',
+    e.tag||'',
+    '"'+e.comment.replace(/"/g,'""')+'"'
+  ]);
+  const csv = [cols,...rows].map(r=>r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download = 'owh-testing-log.csv';
+  a.click();
+}
+
+load();
+</script>
+</body>
+</html>
